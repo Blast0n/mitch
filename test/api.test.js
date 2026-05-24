@@ -57,3 +57,35 @@ test('GET/PUT /api/settings works', async () => {
   const r = await request(app).get('/api/settings');
   assert.equal(r.body.channel, 'c');
 });
+
+async function setupForSend() {
+  await request(app).put('/api/accounts').send([
+    { login: 'u1', oauthToken: 'oauth:' + 'x'.repeat(30) }
+  ]).expect(204);
+  await request(app).put('/api/settings').send({
+    channel: 'c', word: 'w', accountsPerProxy: 5, spreadSeconds: 0, concurrency: 5
+  }).expect(204);
+}
+
+test('POST /api/send returns jobId 202', async () => {
+  await setupForSend();
+  const r = await request(app).post('/api/send').send({});
+  assert.equal(r.status, 202);
+  assert.ok(r.body.jobId);
+});
+
+test('POST /api/send 400 when accounts empty', async () => {
+  const r = await request(app).post('/api/send').send({});
+  assert.equal(r.status, 400);
+});
+
+test('POST /api/send 409 when one already running', async () => {
+  const blocker = new Promise(r => setTimeout(r, 200));
+  const slowSender = createSender({ sendOne: async () => { await blocker; return { ok: true, durationMs: 200 }; } });
+  const app2 = buildApp(store, slowSender);
+  await request(app2).put('/api/accounts').send([{ login: 'u', oauthToken: 'oauth:' + 'x'.repeat(30) }]).expect(204);
+  await request(app2).put('/api/settings').send({ channel:'c', word:'w', accountsPerProxy:5, spreadSeconds:0, concurrency:1 }).expect(204);
+  await request(app2).post('/api/send').send({}).expect(202);
+  const second = await request(app2).post('/api/send').send({});
+  assert.equal(second.status, 409);
+});
