@@ -1,11 +1,16 @@
 import { layout } from './layout.js';
 
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 export function mainPage({ settings, counts }) {
   const body = `
 <h1>Send</h1>
 <section class="summary">
-  <div><strong>Channel:</strong> #${settings.channel || '—'}</div>
-  <div><strong>Word:</strong> ${settings.word || '—'}</div>
+  <div><strong>Channel:</strong> #${esc(settings.channel || '—')}</div>
+  <div><strong>Word:</strong> ${esc(settings.word || '—')}</div>
   <div><strong>Accounts:</strong> ${counts.accounts}</div>
   <div><strong>Proxies:</strong> ${counts.proxies} (${settings.accountsPerProxy}/proxy)</div>
   <div><strong>Spread:</strong> ${settings.spreadSeconds}s</div>

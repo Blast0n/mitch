@@ -56,6 +56,11 @@ export function apiRouter({ store, sender }) {
     const jobId = req.query.jobId;
     if (!jobId) return res.status(400).json({ error: 'jobId required' });
 
+    const snapshotPre = sender.getSnapshot(jobId);
+    if (!snapshotPre && sender.lastJobId() !== jobId) {
+      return res.status(404).json({ error: 'job_not_found' });
+    }
+
     res.set({
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',

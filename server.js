@@ -34,6 +34,7 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '256kb' }));
+app.use(express.urlencoded({ extended: false }));
 
 // Cookie parser (minimal)
 app.use((req, _res, next) => {
@@ -65,7 +66,6 @@ app.post('/login', loginLimiter, async (req, res) => {
   }
   res.status(401).type('html').send('<p>Wrong password. <a href="/login">try again</a></p>');
 });
-app.use(express.urlencoded({ extended: false }));
 app.get('/logout', (req, res) => {
   res.setHeader('Set-Cookie', `${COOKIE_NAME}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);
   res.redirect('/login');

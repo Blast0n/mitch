@@ -23,10 +23,24 @@ if ($('#accounts-table')) {
   const tbody = $('#accounts-table tbody');
   const addRow = (a = { login: '', oauthToken: '' }) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><input class="login" value="${a.login || ''}"></td>
-      <td><input class="token" value="${a.oauthToken || ''}" type="password"></td>
-      <td><button class="del">×</button></td>`;
-    tr.querySelector('.del').onclick = () => tr.remove();
+    const tdLogin = document.createElement('td');
+    const inpLogin = document.createElement('input');
+    inpLogin.className = 'login';
+    inpLogin.value = a.login || '';
+    tdLogin.appendChild(inpLogin);
+    const tdTok = document.createElement('td');
+    const inpTok = document.createElement('input');
+    inpTok.className = 'token';
+    inpTok.type = 'password';
+    inpTok.value = a.oauthToken || '';
+    tdTok.appendChild(inpTok);
+    const tdDel = document.createElement('td');
+    const btnDel = document.createElement('button');
+    btnDel.className = 'del';
+    btnDel.textContent = '×';
+    btnDel.onclick = () => tr.remove();
+    tdDel.appendChild(btnDel);
+    tr.append(tdLogin, tdTok, tdDel);
     tbody.appendChild(tr);
   };
   api('GET', '/api/accounts').then(rows => (rows || []).forEach(addRow));
@@ -55,12 +69,28 @@ if ($('#proxies-table')) {
   const tbody = $('#proxies-table tbody');
   const addRow = (p = {}) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td><input class="host" value="${p.host || ''}"></td>
-      <td><input class="port" type="number" value="${p.port || ''}"></td>
-      <td><input class="user" value="${p.username || ''}"></td>
-      <td><input class="pass" value="${p.password || ''}" type="password"></td>
-      <td><button class="del">×</button></td>`;
-    tr.querySelector('.del').onclick = () => tr.remove();
+    const mk = (cls, type, val) => {
+      const td = document.createElement('td');
+      const inp = document.createElement('input');
+      inp.className = cls;
+      if (type) inp.type = type;
+      inp.value = val ?? '';
+      td.appendChild(inp);
+      return td;
+    };
+    const tdDel = document.createElement('td');
+    const btnDel = document.createElement('button');
+    btnDel.className = 'del';
+    btnDel.textContent = '×';
+    btnDel.onclick = () => tr.remove();
+    tdDel.appendChild(btnDel);
+    tr.append(
+      mk('host', null, p.host),
+      mk('port', 'number', p.port),
+      mk('user', null, p.username),
+      mk('pass', 'password', p.password),
+      tdDel
+    );
     tbody.appendChild(tr);
   };
   api('GET', '/api/proxies').then(rows => (rows || []).forEach(addRow));
@@ -129,7 +159,11 @@ if ($('#send-btn')) {
     if (!tr) {
       tr = document.createElement('tr');
       tr.dataset.login = login;
-      tr.innerHTML = `<td>${login}</td><td>pending</td><td>—</td><td>—</td><td></td>`;
+      for (let i = 0; i < 5; i++) tr.appendChild(document.createElement('td'));
+      tr.children[0].textContent = login;
+      tr.children[1].textContent = 'pending';
+      tr.children[2].textContent = '—';
+      tr.children[3].textContent = '—';
       tbody.appendChild(tr);
     }
     return tr;
