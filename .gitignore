@@ -2,3 +2,8 @@ data/
 .env
 node_modules/
 .DS_Store
+
+# OS / editors
+*.log
+.idea/
+.vscode/
