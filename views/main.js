@@ -1,0 +1,20 @@
+import { layout } from './layout.js';
+
+export function mainPage({ settings, counts }) {
+  const body = `
+<h1>Send</h1>
+<section class="summary">
+  <div><strong>Channel:</strong> #${settings.channel || '—'}</div>
+  <div><strong>Word:</strong> ${settings.word || '—'}</div>
+  <div><strong>Accounts:</strong> ${counts.accounts}</div>
+  <div><strong>Proxies:</strong> ${counts.proxies} (${settings.accountsPerProxy}/proxy)</div>
+  <div><strong>Spread:</strong> ${settings.spreadSeconds}s</div>
+  <div><strong>Concurrency:</strong> ${settings.concurrency}</div>
+  <a href="/settings">Edit</a>
+</section>
+<button id="send-btn">Send</button>
+<button id="retry-btn" hidden>Retry failed</button>
+<table id="progress"><thead><tr><th>Login</th><th>Status</th><th>Proxy</th><th>Duration</th><th>Error</th></tr></thead><tbody></tbody></table>
+<p id="summary"></p>`;
+  return layout({ title: 'Send', body, active: '/' });
+}
