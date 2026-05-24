@@ -1,0 +1,19 @@
+[Unit]
+Description=Twitch Multi-Sender
+After=network.target
+
+[Service]
+Type=simple
+User=tms
+WorkingDirectory=/opt/twitch-sender
+EnvironmentFile=/opt/twitch-sender/.env
+ExecStart=/usr/bin/node /opt/twitch-sender/server.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

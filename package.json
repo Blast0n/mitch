@@ -1,0 +1,26 @@
+{
+  "name": "twitch-multi-sender",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20.0.0" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test \"test/*.test.js\"",
+    "test:watch": "node --test --watch \"test/*.test.js\"",
+    "hash": "node scripts/hash.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cookie-signature": "^1.2.2",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "p-limit": "^5.0.0",
+    "socks-proxy-agent": "^8.0.4",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "supertest": "^7.0.0"
+  }
+}
