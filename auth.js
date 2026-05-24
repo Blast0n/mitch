@@ -1,4 +1,11 @@
 import crypto from 'node:crypto';
+import bcrypt from 'bcrypt';
+
+export async function verifyPassword(plain, hash) {
+  if (!hash || typeof hash !== 'string') return false;
+  try { return await bcrypt.compare(plain, hash); }
+  catch { return false; }
+}
 
 export function signCookie(payload, secret) {
   const body = JSON.stringify(payload);
@@ -22,4 +29,23 @@ export function verifyCookie(token, secret) {
   } catch {
     return null;
   }
+}
+
+export const COOKIE_NAME = 'tms_sid';
+
+export function makeMiddleware({ secret, cookieMaxAgeMs }) {
+  return function authMw(req, res, next) {
+    const raw = req.cookies?.[COOKIE_NAME];
+    const payload = raw ? verifyCookie(raw, secret) : null;
+    const fresh = payload && (Date.now() - payload.ts) < cookieMaxAgeMs;
+    if (fresh) return next();
+    const wantsJson = (req.path || '').startsWith('/api/') ||
+                       (req.headers?.accept || '').includes('application/json');
+    if (wantsJson) return res.status(401).json({ error: 'unauthorized' });
+    return res.redirect('/login');
+  };
+}
+
+export function buildCookie(secret) {
+  return signCookie({ ts: Date.now() }, secret);
 }
