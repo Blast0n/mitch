@@ -1,5 +1,6 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import express from 'express';
 import request from 'supertest';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -88,4 +89,31 @@ test('POST /api/send 409 when one already running', async () => {
   await request(app2).post('/api/send').send({}).expect(202);
   const second = await request(app2).post('/api/send').send({});
   assert.equal(second.status, 409);
+});
+
+test('GET /api/progress streams events', async () => {
+  await setupForSend();
+  const startRes = await request(app).post('/api/send').send({});
+  const jobId = startRes.body.jobId;
+  const got = await new Promise((resolve, reject) => {
+    const server = app.listen(0, () => {
+      const port = server.address().port;
+      const req = http.request({
+        hostname: '127.0.0.1', port, path: `/api/progress?jobId=${jobId}`, method: 'GET'
+      }, (res) => {
+        let buf = '';
+        res.on('data', (chunk) => {
+          buf += chunk.toString();
+          if (buf.includes('event: done')) {
+            req.destroy();
+            server.close();
+            resolve(buf);
+          }
+        });
+      });
+      req.on('error', reject);
+      req.end();
+    });
+  });
+  assert.match(got, /event: done/);
 });

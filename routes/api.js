@@ -52,5 +52,40 @@ export function apiRouter({ store, sender }) {
     }
   });
 
+  r.get('/progress', (req, res) => {
+    const jobId = req.query.jobId;
+    if (!jobId) return res.status(400).json({ error: 'jobId required' });
+
+    res.set({
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+    res.flushHeaders?.();
+
+    const snapshot = sender.getSnapshot(jobId);
+    if (snapshot) {
+      for (const r of snapshot.results) {
+        res.write(`event: progress\ndata: ${JSON.stringify({ login: r.login, proxy: r.proxy, result: { ok: r.ok, error: r.error, durationMs: r.durationMs } })}\n\n`);
+      }
+      if (snapshot.status === 'done') {
+        const ok = snapshot.results.filter(r => r.ok).length;
+        const total = snapshot.results.length;
+        res.write(`event: done\ndata: ${JSON.stringify({ jobId, summary: { total, ok, failed: total - ok } })}\n\n`);
+        return res.end();
+      }
+    }
+
+    const unsubscribe = sender.subscribe(jobId, (event) => {
+      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+      if (event.type === 'done') {
+        res.end();
+      }
+    });
+
+    req.on('close', () => unsubscribe());
+  });
+
   return r;
 }
