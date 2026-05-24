@@ -6,8 +6,8 @@
   "engines": { "node": ">=20.0.0" },
   "scripts": {
     "start": "node server.js",
-    "test": "node --test test/",
-    "test:watch": "node --test --watch test/",
+    "test": "node --test \"test/*.test.js\"",
+    "test:watch": "node --test --watch \"test/*.test.js\"",
     "hash": "node scripts/hash.js"
   },
   "dependencies": {
