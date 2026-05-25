@@ -182,7 +182,11 @@ if ($('#send-btn')) {
     chat_blocked: 'Аккаунт заблокирован в чате',
     join_failed: 'Не удалось войти в канал',
     timeout: 'Превышено время ожидания (15 сек)',
-    unknown: 'Неизвестная ошибка'
+    unknown: 'Неизвестная ошибка',
+    bulk_running: 'Идёт bulk-send, подожди завершения',
+    unknown_account: 'Аккаунт не найден',
+    empty_message: 'Введи сообщение',
+    no_channel: 'В Settings не задан канал'
   };
   const STAGE_LABELS = {
     connecting: 'подключение',
@@ -215,6 +219,21 @@ if ($('#send-btn')) {
     logEl.scrollTop = logEl.scrollHeight;
   }
   function clearLog() { logEl.innerHTML = ''; }
+
+  function qsSetDisabled(disabled) {
+    const ids = ['qs-login', 'qs-message', 'qs-send'];
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (el) el.disabled = disabled;
+    }
+    const status = document.getElementById('qs-status');
+    if (status && disabled) {
+      status.className = '';
+      status.textContent = 'Жди завершения bulk-send';
+    } else if (status && status.textContent === 'Жди завершения bulk-send') {
+      status.textContent = '';
+    }
+  }
 
   const counts = { pending: 0, sending: 0, ok: 0, failed: 0 };
   function setCount(k, v) { counts[k] = v; const el = { pending: cntPending, sending: cntSending, ok: cntOk, failed: cntFailed }[k]; if (el) el.textContent = v; }
@@ -294,6 +313,7 @@ if ($('#send-btn')) {
       btn.disabled = false;
       if (s.failed > 0) retry.hidden = false;
       stopElapsed();
+      qsSetDisabled(false);
       logEvent({ text: `завершено: ${s.ok}/${s.total} успешно, ${s.failed} с ошибкой`, kind: s.failed === 0 ? 'ok' : 'err' });
       es.close();
     });
@@ -306,6 +326,7 @@ if ($('#send-btn')) {
     retry.hidden = true;
     clearLog();
     stats.hidden = false;
+    qsSetDisabled(true);
     // Get accounts count + spread for initial counters/ETA
     const [accounts, settings] = await Promise.all([
       fetch('/api/accounts').then(r => r.json()),
@@ -323,16 +344,129 @@ if ($('#send-btn')) {
       const body = await r.json();
       logEvent({ text: 'job уже идёт, подключаемся', kind: 'err' });
       if (body.jobId) attachSSE(body.jobId);
-      else { summaryEl.textContent = 'A job is already running.'; btn.disabled = false; stopElapsed(); }
+      else { summaryEl.textContent = 'A job is already running.'; btn.disabled = false; qsSetDisabled(false); stopElapsed(); }
     } else {
       const body = await r.json().catch(() => ({}));
       summaryEl.textContent = 'Error: ' + (body.error || r.status);
       logEvent({ text: 'не удалось запустить: ' + (body.error || r.status), kind: 'err' });
       btn.disabled = false;
+      qsSetDisabled(false);
       stopElapsed();
     }
   }
 
   btn.onclick = () => startJob('/api/send');
   retry.onclick = () => startJob('/api/send/retry-failed');
+}
+
+// ===== Quick send (lives on the main page, but in its own block to keep imports clean) =====
+if ($('#qs-form')) {
+  const form = $('#qs-form');
+  const loginInp = $('#qs-login');
+  const msgInp = $('#qs-message');
+  const sendBtn = $('#qs-send');
+  const statusEl = $('#qs-status');
+  const datalist = $('#qs-accounts');
+  const logEl = $('#event-log');
+
+  const ERROR_LABELS = {
+    token_invalid: 'Токен невалиден или протух',
+    proxy_unreachable: 'Прокси не отвечает',
+    proxy_auth_failed: 'Прокси: неверный логин/пароль',
+    twitch_unreachable: 'Twitch недоступен',
+    chat_blocked: 'Аккаунт заблокирован в чате',
+    join_failed: 'Не удалось войти в канал',
+    timeout: 'Превышено время ожидания (15 сек)',
+    unknown: 'Неизвестная ошибка',
+    bulk_running: 'Идёт bulk-send, подожди завершения',
+    unknown_account: 'Аккаунт не найден',
+    empty_message: 'Введи сообщение',
+    no_channel: 'В Settings не задан канал'
+  };
+  const errLabel = (code) => code ? (ERROR_LABELS[code] || code) : '';
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function nowStamp() {
+    const d = new Date();
+    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+  function logEvent({ text, kind, login }) {
+    if (!logEl) return;
+    const time = document.createElement('span');
+    time.className = 'log-time';
+    time.textContent = '[' + nowStamp() + '] ';
+    const who = document.createElement('span');
+    who.className = 'log-login';
+    who.textContent = login ? login + ' → ' : '';
+    const msg = document.createElement('span');
+    if (kind === 'ok') msg.className = 'log-ok';
+    else if (kind === 'err') msg.className = 'log-err';
+    msg.textContent = text;
+    const line = document.createElement('div');
+    line.append(time, who, msg);
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setStatus(text, ok) {
+    statusEl.textContent = text;
+    statusEl.className = ok === true ? 'ok' : ok === false ? 'error' : '';
+  }
+
+  // Load login list into datalist on page load.
+  fetch('/api/accounts', { credentials: 'same-origin' })
+    .then(r => r.status === 401 ? (location.href = '/login', null) : r.json())
+    .then(rows => {
+      if (!rows) return;
+      datalist.innerHTML = '';
+      for (const a of rows) {
+        const opt = document.createElement('option');
+        opt.value = a.login;
+        datalist.appendChild(opt);
+      }
+    })
+    .catch(() => {});
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const login = loginInp.value.trim();
+    const message = msgInp.value;
+    if (!login || !message.trim()) {
+      setStatus('Заполни оба поля', false);
+      return;
+    }
+    sendBtn.disabled = true;
+    setStatus('отправка…');
+    const preview = message.length > 40 ? message.slice(0, 40) + '…' : message;
+    logEvent({ login, text: `quick: "${preview}"` });
+    try {
+      const r = await fetch('/api/quick-send', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ login, message })
+      });
+      if (r.status === 401) { location.href = '/login'; return; }
+      const body = await r.json().catch(() => ({}));
+      if (r.status === 200 && body.ok) {
+        setStatus(`ok (${body.durationMs}ms) через ${body.proxy}`, true);
+        logEvent({ login, text: `ok (${body.durationMs}ms через ${body.proxy})`, kind: 'ok' });
+        msgInp.value = '';
+        msgInp.focus();
+      } else if (r.status === 200 && !body.ok) {
+        const label = errLabel(body.error);
+        setStatus(label, false);
+        logEvent({ login, text: 'ошибка: ' + label, kind: 'err' });
+      } else {
+        const label = errLabel(body.error) || `HTTP ${r.status}`;
+        setStatus(label, false);
+        logEvent({ login, text: 'ошибка: ' + label, kind: 'err' });
+      }
+    } catch (err) {
+      setStatus('Сеть: ' + err.message, false);
+      logEvent({ login, text: 'сеть: ' + err.message, kind: 'err' });
+    } finally {
+      sendBtn.disabled = false;
+    }
+  });
 }
