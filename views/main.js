@@ -27,11 +27,11 @@ export function mainPage({ settings, counts }) {
   <span class="ok">OK: <strong id="cnt-ok">0</strong></span>
   <span class="error">Failed: <strong id="cnt-failed">0</strong></span>
 </section>
-<table id="progress"><thead><tr><th>Login</th><th>Status</th><th>Proxy</th><th>Duration</th><th>Error</th></tr></thead><tbody></tbody></table>
-<p id="summary"></p>
 <details id="log-details" open>
   <summary>Event log</summary>
   <pre id="event-log"></pre>
-</details>`;
+</details>
+<table id="progress"><thead><tr><th>Login</th><th>Status</th><th>Proxy</th><th>Duration</th><th>Error</th></tr></thead><tbody></tbody></table>
+<p id="summary"></p>`;
   return layout({ title: 'Send', body, active: '/' });
 }
