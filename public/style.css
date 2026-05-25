@@ -30,3 +30,12 @@ form { display:flex; flex-direction:column; gap:.5rem; max-width:400px; }
 #event-log .log-ok { color:var(--ok); }
 #event-log .log-err { color:var(--danger); }
 #event-log .log-login { color:var(--accent); }
+.quicksend { margin-bottom:1rem; padding:.75rem 1rem; background:#1a1d24; border-radius:6px; }
+.quicksend h2 { font-size:1rem; margin:0 0 .5rem; color:var(--muted); }
+.quicksend form { display:flex; gap:.5rem; align-items:center; max-width:none; }
+.quicksend input { flex:1; }
+.quicksend #qs-login { flex:0 0 200px; }
+.quicksend button { flex:0 0 3rem; }
+#qs-status { margin-top:.4rem; min-height:1.2rem; font-size:.9rem; }
+#qs-status.ok { color:var(--ok); }
+#qs-status.error { color:var(--danger); }

@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { validateAccounts, validateProxies, validateSettings } from '../store.js';
+import { sendOne } from '../twitch.js';
+import { assignProxy } from '../sender.js';
 
-export function apiRouter({ store, sender }) {
+export function apiRouter({ store, sender, sendOne: sendOneImpl }) {
   const r = Router();
+  const sendOneFn = sendOneImpl ?? sendOne;
 
   const crud = (name, validate) => {
     r.get(`/${name}`, async (req, res) => res.json(await store.read(name)));
@@ -16,6 +19,25 @@ export function apiRouter({ store, sender }) {
   crud('accounts', validateAccounts);
   crud('proxies', validateProxies);
   crud('settings', validateSettings);
+
+  r.post('/quick-send', async (req, res) => {
+    if (sender.isRunning()) return res.status(409).json({ error: 'bulk_running' });
+    const { login, message } = req.body || {};
+    if (typeof message !== 'string' || message.trim() === '') {
+      return res.status(400).json({ error: 'empty_message' });
+    }
+    const [accounts, proxies, settings] = await Promise.all([
+      store.read('accounts'), store.read('proxies'), store.read('settings')
+    ]);
+    if (!settings.channel) return res.status(400).json({ error: 'no_channel' });
+    const idx = accounts.findIndex(a => a.login === login);
+    if (idx < 0) return res.status(404).json({ error: 'unknown_account' });
+    const proxy = assignProxy(idx, proxies, settings.accountsPerProxy);
+    const proxyLabel = proxy ? `${proxy.host}:${proxy.port}` : 'direct';
+    if (sender.isRunning()) return res.status(409).json({ error: 'bulk_running' });
+    const result = await sendOneFn(accounts[idx], proxy, settings.channel, message);
+    res.json({ ...result, proxy: proxyLabel });
+  });
 
   r.post('/send', async (req, res) => {
     const [accounts, proxies, settings] = await Promise.all([

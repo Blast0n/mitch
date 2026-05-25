@@ -8,6 +8,16 @@ function esc(s) {
 export function mainPage({ settings, counts }) {
   const body = `
 <h1>Send</h1>
+<section class="quicksend">
+  <h2>Quick send</h2>
+  <form id="qs-form" autocomplete="off">
+    <input id="qs-login" list="qs-accounts" placeholder="Логин аккаунта" required>
+    <datalist id="qs-accounts"></datalist>
+    <input id="qs-message" placeholder="Сообщение" required>
+    <button id="qs-send" type="submit">▶</button>
+  </form>
+  <div id="qs-status"></div>
+</section>
 <section class="summary">
   <div><strong>Channel:</strong> #${esc(settings.channel || '—')}</div>
   <div><strong>Word:</strong> ${esc(settings.word || '—')}</div>
