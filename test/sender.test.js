@@ -84,3 +84,22 @@ test('createSender: failed results captured for retry', async () => {
   const failed = sender.getFailedLogins(jobId);
   assert.equal(failed.length, 2);
 });
+
+test('createSender: forwards stage events from sendOne', async () => {
+  const login = 'stageuser';
+  const sendOne = async (_account, _proxy, _channel, _word, opts) => {
+    opts.onStage('connecting');
+    opts.onStage('sent');
+    return { ok: true, durationMs: 1 };
+  };
+  const sender = createSender({ sendOne });
+  const events = [];
+  const accounts = [{ login, oauthToken: 'oauth:x' }];
+  const { jobId } = sender.start({ accounts, proxies: [], settings });
+  sender.subscribe(jobId, (e) => events.push(e));
+  await new Promise(r => setTimeout(r, 50));
+  const stageEvents = events.filter(e => e.type === 'stage');
+  assert.equal(stageEvents.length, 2);
+  assert.deepEqual(stageEvents[0], { type: 'stage', login, stage: 'connecting' });
+  assert.deepEqual(stageEvents[1], { type: 'stage', login, stage: 'sent' });
+});

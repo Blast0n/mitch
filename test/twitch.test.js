@@ -144,3 +144,20 @@ test('sendOne: PING/PONG handled during post-send wait', async () => {
   );
   assert.equal(r.ok, true);
 });
+
+test('sendOne: onStage captures all stages in order', async () => {
+  const t = fakeTransport([
+    { type: 'expect', re: /^PASS / },
+    { type: 'expect', re: /^NICK / },
+    { type: 'expect', re: /^JOIN / },
+    { type: 'expect', re: /^PRIVMSG / }
+  ]);
+  const stages = [];
+  const result = await sendOne(
+    { login: 'u', oauthToken: 'oauth:xxx' },
+    null, 'chan', 'hello',
+    { transport: t, postSendWaitMs: 50, overallTimeoutMs: 5000, onStage: (s) => stages.push(s) }
+  );
+  assert.equal(result.ok, true);
+  assert.deepEqual(stages, ['connecting', 'auth', 'join', 'sent', 'waiting']);
+});

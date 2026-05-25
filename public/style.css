@@ -21,3 +21,12 @@ th, td { text-align:left; padding:.4rem .5rem; border-bottom:1px solid #232830; 
 .login { display:flex; flex-direction:column; gap:.75rem; min-width:260px; padding:1.5rem; background:#1a1d24; border-radius:8px; }
 label { display:flex; flex-direction:column; gap:.25rem; margin:.5rem 0; }
 form { display:flex; flex-direction:column; gap:.5rem; max-width:400px; }
+.job-stats { display:flex; flex-wrap:wrap; gap:1rem; margin:.75rem 0; padding:.5rem .75rem; background:#1a1d24; border-radius:6px; }
+.job-stats span { display:inline-flex; gap:.35rem; align-items:baseline; }
+#log-details { margin-top:1rem; }
+#log-details summary { cursor:pointer; padding:.4rem .6rem; background:#1a1d24; border-radius:4px; }
+#event-log { background:#0a0c10; color:#c8d1da; padding:.75rem; border-radius:0 0 4px 4px; max-height:240px; overflow:auto; font:12px/1.45 ui-monospace,Consolas,monospace; white-space:pre-wrap; word-break:break-word; margin:0; }
+#event-log .log-time { color:#7a8290; }
+#event-log .log-ok { color:var(--ok); }
+#event-log .log-err { color:var(--danger); }
+#event-log .log-login { color:var(--accent); }

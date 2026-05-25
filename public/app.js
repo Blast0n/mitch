@@ -165,7 +165,79 @@ if ($('#send-btn')) {
   const btn = $('#send-btn');
   const retry = $('#retry-btn');
   const tbody = $('#progress tbody');
-  const summary = $('#summary');
+  const summaryEl = $('#summary');
+  const stats = $('#job-stats');
+  const elapsedEl = $('#elapsed');
+  const etaEl = $('#eta');
+  const cntPending = $('#cnt-pending');
+  const cntSending = $('#cnt-sending');
+  const cntOk = $('#cnt-ok');
+  const cntFailed = $('#cnt-failed');
+  const logEl = $('#event-log');
+
+  const ERROR_LABELS = {
+    token_invalid: 'Токен невалиден или протух',
+    proxy_unreachable: 'Прокси не отвечает',
+    proxy_auth_failed: 'Прокси: неверный логин/пароль',
+    twitch_unreachable: 'Twitch недоступен',
+    chat_blocked: 'Аккаунт заблокирован в чате',
+    join_failed: 'Не удалось войти в канал',
+    timeout: 'Превышено время ожидания (15 сек)',
+    unknown: 'Неизвестная ошибка'
+  };
+  const STAGE_LABELS = {
+    connecting: 'подключение',
+    auth: 'авторизация',
+    join: 'вход в канал',
+    sent: 'отправлено',
+    waiting: 'подтверждение'
+  };
+  const errLabel = (code) => code ? (ERROR_LABELS[code] || code) : '';
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function nowStamp() {
+    const d = new Date();
+    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+  function logEvent({ text, kind, login }) {
+    const time = document.createElement('span');
+    time.className = 'log-time';
+    time.textContent = '[' + nowStamp() + '] ';
+    const who = document.createElement('span');
+    who.className = 'log-login';
+    who.textContent = login ? login + ' → ' : '';
+    const msg = document.createElement('span');
+    if (kind === 'ok') msg.className = 'log-ok';
+    else if (kind === 'err') msg.className = 'log-err';
+    msg.textContent = text;
+    const line = document.createElement('div');
+    line.append(time, who, msg);
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function clearLog() { logEl.innerHTML = ''; }
+
+  const counts = { pending: 0, sending: 0, ok: 0, failed: 0 };
+  function setCount(k, v) { counts[k] = v; const el = { pending: cntPending, sending: cntSending, ok: cntOk, failed: cntFailed }[k]; if (el) el.textContent = v; }
+  function resetCounts(total) {
+    setCount('pending', total);
+    setCount('sending', 0);
+    setCount('ok', 0);
+    setCount('failed', 0);
+  }
+
+  let jobStart = 0, elapsedTimer = null;
+  function startElapsed(totalEta) {
+    jobStart = Date.now();
+    if (totalEta) etaEl.textContent = totalEta + 's';
+    elapsedTimer = setInterval(() => {
+      elapsedEl.textContent = Math.floor((Date.now() - jobStart) / 1000) + 's';
+    }, 250);
+  }
+  function stopElapsed() {
+    if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+  }
+
   const rowFor = (login) => {
     let tr = tbody.querySelector(`tr[data-login="${CSS.escape(login)}"]`);
     if (!tr) {
@@ -180,13 +252,25 @@ if ($('#send-btn')) {
     }
     return tr;
   };
+
   function attachSSE(jobId) {
     const es = new EventSource('/api/progress?jobId=' + encodeURIComponent(jobId));
     es.addEventListener('sending', (e) => {
       const { login, proxy } = JSON.parse(e.data);
       const tr = rowFor(login);
       tr.children[1].textContent = 'sending';
+      tr.children[1].className = '';
       tr.children[2].textContent = proxy;
+      setCount('pending', Math.max(0, counts.pending - 1));
+      setCount('sending', counts.sending + 1);
+      logEvent({ login, text: 'старт' + (proxy && proxy !== 'direct' ? ' через ' + proxy : ' (без прокси)') });
+    });
+    es.addEventListener('stage', (e) => {
+      const { login, stage } = JSON.parse(e.data);
+      const tr = rowFor(login);
+      const label = STAGE_LABELS[stage] || stage;
+      tr.children[1].textContent = label;
+      logEvent({ login, text: label });
     });
     es.addEventListener('progress', (e) => {
       const { login, proxy, result } = JSON.parse(e.data);
@@ -195,48 +279,61 @@ if ($('#send-btn')) {
       tr.children[1].className = result.ok ? 'ok' : 'error';
       tr.children[2].textContent = proxy;
       tr.children[3].textContent = (result.durationMs ?? '—') + 'ms';
-      tr.children[4].textContent = result.error || '';
+      tr.children[4].textContent = errLabel(result.error);
+      setCount('sending', Math.max(0, counts.sending - 1));
+      if (result.ok) {
+        setCount('ok', counts.ok + 1);
+        logEvent({ login, text: 'успех (' + result.durationMs + 'ms)', kind: 'ok' });
+      } else {
+        setCount('failed', counts.failed + 1);
+        logEvent({ login, text: 'ошибка: ' + errLabel(result.error), kind: 'err' });
+      }
     });
     es.addEventListener('done', (e) => {
       const { summary: s } = JSON.parse(e.data);
-      summary.textContent = `Done: ${s.ok}/${s.total} ok, ${s.failed} failed`;
+      summaryEl.textContent = `Готово: ${s.ok}/${s.total} ok, ${s.failed} failed`;
       btn.disabled = false;
       if (s.failed > 0) retry.hidden = false;
+      stopElapsed();
+      logEvent({ text: `завершено: ${s.ok}/${s.total} успешно, ${s.failed} с ошибкой`, kind: s.failed === 0 ? 'ok' : 'err' });
       es.close();
     });
   }
-  btn.onclick = async () => {
+
+  async function startJob(endpoint) {
     btn.disabled = true;
     tbody.innerHTML = '';
-    summary.textContent = '';
+    summaryEl.textContent = '';
     retry.hidden = true;
-    const r = await fetch('/api/send', { method: 'POST', headers: {'content-type':'application/json'}, body: '{}' });
+    clearLog();
+    stats.hidden = false;
+    // Get accounts count + spread for initial counters/ETA
+    const [accounts, settings] = await Promise.all([
+      fetch('/api/accounts').then(r => r.json()),
+      fetch('/api/settings').then(r => r.json())
+    ]);
+    const total = endpoint.includes('retry-failed') ? counts.failed : accounts.length;
+    resetCounts(total);
+    startElapsed(settings.spreadSeconds || 0);
+    logEvent({ text: `запуск job: ${total} аккаунтов, spread ${settings.spreadSeconds}s, concurrency ${settings.concurrency}` });
+    const r = await fetch(endpoint, { method: 'POST', headers: {'content-type':'application/json'}, body: '{}' });
     if (r.status === 202) {
       const { jobId } = await r.json();
       attachSSE(jobId);
     } else if (r.status === 409) {
       const body = await r.json();
+      logEvent({ text: 'job уже идёт, подключаемся', kind: 'err' });
       if (body.jobId) attachSSE(body.jobId);
-      else { summary.textContent = 'A job is already running.'; btn.disabled = false; }
+      else { summaryEl.textContent = 'A job is already running.'; btn.disabled = false; stopElapsed(); }
     } else {
       const body = await r.json().catch(() => ({}));
-      summary.textContent = 'Error: ' + (body.error || r.status);
+      summaryEl.textContent = 'Error: ' + (body.error || r.status);
+      logEvent({ text: 'не удалось запустить: ' + (body.error || r.status), kind: 'err' });
       btn.disabled = false;
+      stopElapsed();
     }
-  };
-  retry.onclick = async () => {
-    retry.hidden = true;
-    btn.disabled = true;
-    tbody.innerHTML = '';
-    summary.textContent = '';
-    const r = await fetch('/api/send/retry-failed', { method: 'POST', headers: {'content-type':'application/json'}, body: '{}' });
-    if (r.status === 202) {
-      const { jobId } = await r.json();
-      attachSSE(jobId);
-    } else {
-      const body = await r.json().catch(() => ({}));
-      summary.textContent = 'Error: ' + (body.error || r.status);
-      btn.disabled = false;
-    }
-  };
+  }
+
+  btn.onclick = () => startJob('/api/send');
+  retry.onclick = () => startJob('/api/send/retry-failed');
 }

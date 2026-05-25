@@ -19,7 +19,19 @@ export function mainPage({ settings, counts }) {
 </section>
 <button id="send-btn">Send</button>
 <button id="retry-btn" hidden>Retry failed</button>
+<section class="job-stats" id="job-stats" hidden>
+  <span>Прошло: <strong id="elapsed">0s</strong></span>
+  <span>ETA: <strong id="eta">—</strong></span>
+  <span>Pending: <strong id="cnt-pending">0</strong></span>
+  <span>Sending: <strong id="cnt-sending">0</strong></span>
+  <span class="ok">OK: <strong id="cnt-ok">0</strong></span>
+  <span class="error">Failed: <strong id="cnt-failed">0</strong></span>
+</section>
 <table id="progress"><thead><tr><th>Login</th><th>Status</th><th>Proxy</th><th>Duration</th><th>Error</th></tr></thead><tbody></tbody></table>
-<p id="summary"></p>`;
+<p id="summary"></p>
+<details id="log-details" open>
+  <summary>Event log</summary>
+  <pre id="event-log"></pre>
+</details>`;
   return layout({ title: 'Send', body, active: '/' });
 }

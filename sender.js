@@ -45,7 +45,9 @@ export function createSender({ sendOne }) {
         setTimeout(() => {
           limit(async () => {
             emit(jobId, { type: 'sending', login: account.login, proxy: proxyLabel });
-            const result = await sendOne(account, proxy, settings.channel, settings.word);
+            const result = await sendOne(account, proxy, settings.channel, settings.word, {
+              onStage: (stage) => emit(jobId, { type: 'stage', login: account.login, stage })
+            });
             const entry = { login: account.login, proxy: proxyLabel, ...result };
             job.results.push(entry);
             emit(jobId, { type: 'progress', login: account.login, proxy: proxyLabel, result });

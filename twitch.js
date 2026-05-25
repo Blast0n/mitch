@@ -83,6 +83,7 @@ export async function sendOne(account, proxy, channel, word, opts = {}) {
   const transport = opts.transport ?? defaultTransport;
   const postSendWaitMs = opts.postSendWaitMs ?? 3000;
   const overallTimeoutMs = opts.overallTimeoutMs ?? 15000;
+  const onStage = opts.onStage ?? (() => {});
   const start = Date.now();
   let conn;
   let settled = false;
@@ -103,6 +104,7 @@ export async function sendOne(account, proxy, channel, word, opts = {}) {
 
     overall = setTimeout(() => finish({ ok: false, error: 'timeout' }), overallTimeoutMs);
 
+    onStage('connecting');
     try {
       conn = transport.connect(proxy);
     } catch (err) {
@@ -110,12 +112,16 @@ export async function sendOne(account, proxy, channel, word, opts = {}) {
     }
 
     conn.on('open', () => {
+      onStage('auth');
       try {
         conn.send(buildPass(account.oauthToken));
         conn.send(buildNick(account.login));
+        onStage('join');
         conn.send(buildJoin(channel));
+        onStage('sent');
         conn.send(buildPrivmsg(channel, word));
         privmsgSent = true;
+        onStage('waiting');
         postSendTimer = setTimeout(() => finish({ ok: true }), postSendWaitMs);
       } catch (err) {
         finish({ ok: false, error: 'unknown', details: err.message });
