@@ -47,8 +47,20 @@ if ($('#accounts-table')) {
   $('#add-row').onclick = () => addRow();
   $('#import-bulk').onclick = () => {
     const lines = $('#bulk-import').value.split('\n').map(l => l.trim()).filter(Boolean);
+    const RAW_TOKEN = /^[a-zA-Z0-9_-]{20,}$/;
     for (const line of lines) {
-      const [login, token] = line.split(/\s+/, 2);
+      let login, token;
+      const colon = line.split(':');
+      if (colon.length >= 3 && colon[0] && RAW_TOKEN.test(colon[2])) {
+        // Combo-list format: login:pass:token:userid:date
+        login = colon[0];
+        token = colon[2].startsWith('oauth:') ? colon[2] : 'oauth:' + colon[2];
+      } else {
+        // TSV / space-separated: login<TAB>oauth:xxx
+        const ws = line.split(/\s+/, 2);
+        login = ws[0];
+        token = ws[1] && (ws[1].startsWith('oauth:') ? ws[1] : 'oauth:' + ws[1]);
+      }
       if (login && token) addRow({ login, oauthToken: token });
     }
     $('#bulk-import').value = '';
