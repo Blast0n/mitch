@@ -117,3 +117,91 @@ test('GET /api/progress streams events', async () => {
   });
   assert.match(got, /event: done/);
 });
+
+// Helper to build a configured app with a real twitch.sendOne replacement
+function buildAppWith(sendOneImpl) {
+  const s = new Store(dir);
+  const sender = createSender({ sendOne: sendOneImpl });
+  const a = express();
+  a.use(express.json());
+  a.use('/api', apiRouter({ store: s, sender, sendOne: sendOneImpl }));
+  return { app: a, store: s, sender };
+}
+
+test('POST /api/quick-send happy path', async () => {
+  const { app: a, store: s } = buildAppWith(async () => ({ ok: true, durationMs: 42 }));
+  await s.write('accounts', [{ login: 'alice', oauthToken: 'oauth:' + 'a'.repeat(30) }]);
+  await s.write('settings', { channel: 'somechan', word: 'unused', accountsPerProxy: 5, spreadSeconds: 0, concurrency: 1 });
+  const r = await request(a).post('/api/quick-send').send({ login: 'alice', message: 'hello' });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.ok, true);
+  assert.equal(r.body.durationMs, 42);
+  assert.equal(r.body.proxy, 'direct');
+});
+
+test('POST /api/quick-send uses assignProxy for proxy selection', async () => {
+  let receivedProxy = null;
+  const { app: a, store: s } = buildAppWith(async (account, proxy) => { receivedProxy = proxy; return { ok: true, durationMs: 1 }; });
+  await s.write('accounts', [
+    { login: 'a0', oauthToken: 'oauth:' + 'x'.repeat(30) },
+    { login: 'a1', oauthToken: 'oauth:' + 'y'.repeat(30) }
+  ]);
+  await s.write('proxies', [{ host: '1.2.3.4', port: 1080 }, { host: '5.6.7.8', port: 1080 }]);
+  await s.write('settings', { channel: 'c', word: 'w', accountsPerProxy: 1, spreadSeconds: 0, concurrency: 1 });
+  const r = await request(a).post('/api/quick-send').send({ login: 'a1', message: 'hi' });
+  assert.equal(r.status, 200);
+  assert.equal(receivedProxy?.host, '5.6.7.8');
+  assert.equal(r.body.proxy, '5.6.7.8:1080');
+});
+
+test('POST /api/quick-send returns ok:false from sendOne result', async () => {
+  const { app: a, store: s } = buildAppWith(async () => ({ ok: false, error: 'token_invalid', durationMs: 10 }));
+  await s.write('accounts', [{ login: 'alice', oauthToken: 'oauth:' + 'a'.repeat(30) }]);
+  await s.write('settings', { channel: 'c', word: 'w', accountsPerProxy: 5, spreadSeconds: 0, concurrency: 1 });
+  const r = await request(a).post('/api/quick-send').send({ login: 'alice', message: 'hi' });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.ok, false);
+  assert.equal(r.body.error, 'token_invalid');
+});
+
+test('POST /api/quick-send 409 when bulk job running', async () => {
+  let release;
+  const blocker = new Promise(r => { release = r; });
+  const { app: a, store: s, sender } = buildAppWith(async () => { await blocker; return { ok: true, durationMs: 1 }; });
+  await s.write('accounts', [{ login: 'alice', oauthToken: 'oauth:' + 'a'.repeat(30) }]);
+  await s.write('settings', { channel: 'c', word: 'w', accountsPerProxy: 5, spreadSeconds: 0, concurrency: 1 });
+  // start bulk
+  await request(a).post('/api/send').send({}).expect(202);
+  // quick-send while bulk running
+  const r = await request(a).post('/api/quick-send').send({ login: 'alice', message: 'hi' });
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error, 'bulk_running');
+  release();
+});
+
+test('POST /api/quick-send 404 unknown login', async () => {
+  const { app: a, store: s } = buildAppWith(async () => ({ ok: true, durationMs: 1 }));
+  await s.write('accounts', [{ login: 'alice', oauthToken: 'oauth:' + 'a'.repeat(30) }]);
+  await s.write('settings', { channel: 'c', word: 'w', accountsPerProxy: 5, spreadSeconds: 0, concurrency: 1 });
+  const r = await request(a).post('/api/quick-send').send({ login: 'nobody', message: 'hi' });
+  assert.equal(r.status, 404);
+  assert.equal(r.body.error, 'unknown_account');
+});
+
+test('POST /api/quick-send 400 on empty message', async () => {
+  const { app: a, store: s } = buildAppWith(async () => ({ ok: true, durationMs: 1 }));
+  await s.write('accounts', [{ login: 'alice', oauthToken: 'oauth:' + 'a'.repeat(30) }]);
+  await s.write('settings', { channel: 'c', word: 'w', accountsPerProxy: 5, spreadSeconds: 0, concurrency: 1 });
+  const r = await request(a).post('/api/quick-send').send({ login: 'alice', message: '   ' });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error, 'empty_message');
+});
+
+test('POST /api/quick-send 400 when channel not configured', async () => {
+  const { app: a, store: s } = buildAppWith(async () => ({ ok: true, durationMs: 1 }));
+  await s.write('accounts', [{ login: 'alice', oauthToken: 'oauth:' + 'a'.repeat(30) }]);
+  await s.write('settings', { channel: '', word: 'w', accountsPerProxy: 5, spreadSeconds: 0, concurrency: 1 });
+  const r = await request(a).post('/api/quick-send').send({ login: 'alice', message: 'hi' });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error, 'no_channel');
+});
