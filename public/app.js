@@ -31,7 +31,6 @@ if ($('#accounts-table')) {
     const tdTok = document.createElement('td');
     const inpTok = document.createElement('input');
     inpTok.className = 'token';
-    inpTok.type = 'password';
     inpTok.value = a.oauthToken || '';
     tdTok.appendChild(inpTok);
     const tdDel = document.createElement('td');
