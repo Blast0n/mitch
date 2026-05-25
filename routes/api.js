@@ -34,6 +34,7 @@ export function apiRouter({ store, sender, sendOne: sendOneImpl }) {
     if (idx < 0) return res.status(404).json({ error: 'unknown_account' });
     const proxy = assignProxy(idx, proxies, settings.accountsPerProxy);
     const proxyLabel = proxy ? `${proxy.host}:${proxy.port}` : 'direct';
+    if (sender.isRunning()) return res.status(409).json({ error: 'bulk_running' });
     const result = await sendOneFn(accounts[idx], proxy, settings.channel, message);
     res.json({ ...result, proxy: proxyLabel });
   });

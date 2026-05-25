@@ -18,7 +18,7 @@ th, td { text-align:left; padding:.4rem .5rem; border-bottom:1px solid #232830; 
 .ok { color:var(--ok); }
 .summary { display:grid; grid-template-columns: repeat(auto-fill, minmax(180px,1fr)); gap:.5rem; margin-bottom:1rem; padding:.75rem; background:#1a1d24; border-radius:6px; }
 .centered { display:flex; min-height:100vh; align-items:center; justify-content:center; }
-.login { display:flex; flex-direction:column; gap:.75rem; min-width:260px; padding:0.5rem; background:#1a1d24; border-radius:8px; }
+.login { display:flex; flex-direction:column; gap:.75rem; min-width:260px; padding:1.5rem; background:#1a1d24; border-radius:8px; }
 label { display:flex; flex-direction:column; gap:.25rem; margin:.5rem 0; }
 form { display:flex; flex-direction:column; gap:.5rem; max-width:400px; }
 .job-stats { display:flex; flex-wrap:wrap; gap:1rem; margin:.75rem 0; padding:.5rem .75rem; background:#1a1d24; border-radius:6px; }
