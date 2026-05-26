@@ -8,14 +8,21 @@ Send one message from N Twitch accounts to a channel via SOCKS5 proxies.
 npm install
 npm run hash -- your-password    # paste into .env as APP_PASSWORD_HASH
 openssl rand -hex 32             # paste into .env as SESSION_SECRET
+
+# Option A — single-port dev (build SPA once, run Express)
+npm run build
 npm start
 # open http://127.0.0.1:3000
+
+# Option B — Vite hot-reload (two ports: SPA :5173 proxies API to Express :3000)
+npm run dev
+# open http://127.0.0.1:5173 — SPA reloads on file changes
 ```
 
 ## VPS deploy
 
 1. `useradd -m tms && mkdir -p /opt/twitch-sender && chown tms:tms /opt/twitch-sender`
-2. As `tms`: clone repo, `npm ci --omit=dev`, fill in `.env` (set `PUBLIC_ORIGIN=https://yourdomain.example.com`)
+2. As `tms`: clone repo, `npm ci`, fill in `.env` (set `PUBLIC_ORIGIN=https://yourdomain.example.com`), run `npm run build` to compile the SPA into `dist/`
 3. `cp systemd/twitch-sender.service /etc/systemd/system/` (edit user/path if needed)
 4. `systemctl daemon-reload && systemctl enable --now twitch-sender`
 5. Install Caddy, copy `Caddyfile.example` to `/etc/caddy/Caddyfile` (replace domain), `systemctl reload caddy`

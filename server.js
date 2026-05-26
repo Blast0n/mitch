@@ -72,10 +72,14 @@ app.get('/logout', (req, res) => {
 });
 
 // Static
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'dist')));
 
 // Routes
-app.use(pagesRouter({ store, requireAuth }));
+app.use(pagesRouter());
 app.use('/api', requireAuth, csrf, apiRouter({ store, sender }));
+
+app.get('*', requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
 
 app.listen(PORT, '127.0.0.1', () => console.log(`listening http://127.0.0.1:${PORT}`));
