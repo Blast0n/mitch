@@ -8,6 +8,9 @@ export default defineConfig({
   resolve: {
     alias: { '@': path.resolve(__dirname, 'src') }
   },
+  css: {
+    postcss: __dirname
+  },
   build: {
     outDir: path.resolve(__dirname, '..', 'dist'),
     emptyOutDir: true
