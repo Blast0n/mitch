@@ -1,0 +1,20 @@
+# Auto-merged by `docker compose` on top of docker-compose.yml.
+# Workflow:
+#   git pull         # обновляет исходники прямо в bind-mount
+#   docker compose restart app
+# Если поменялись зависимости: docker compose exec app npm ci && docker compose restart app
+# Если поменялся фронт: docker compose exec app npm run build && docker compose restart app
+
+services:
+  app:
+    volumes:
+      # Bind-mount всего репозитория → правки на хосте видны в контейнере без пересборки образа
+      - .:/app
+      # Named volumes маскируют bind-mount чтобы не затереть установленные npm-пакеты
+      # и собранный dist/ (они живут в контейнере между рестартами).
+      - node_modules:/app/node_modules
+      - dist:/app/dist
+
+volumes:
+  node_modules:
+  dist:

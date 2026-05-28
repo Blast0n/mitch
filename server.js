@@ -16,6 +16,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const {
   PORT = 3000,
+  HOST = '127.0.0.1',
   APP_PASSWORD_HASH,
   SESSION_SECRET,
   COOKIE_DAYS = 7,
@@ -84,4 +85,4 @@ app.get('*', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-app.listen(PORT, '127.0.0.1', () => console.log(`listening http://127.0.0.1:${PORT}`));
+app.listen(PORT, HOST, () => console.log(`listening http://${HOST}:${PORT}`));
