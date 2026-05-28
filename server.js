@@ -8,6 +8,7 @@ import { makeMiddleware, verifyPassword, buildCookie, COOKIE_NAME } from './auth
 import { makeCsrfMiddleware } from './csrf.js';
 import { createSender } from './sender.js';
 import { sendOne } from './twitch.js';
+import { createHealthStore } from './healthStore.js';
 import { pagesRouter } from './routes/pages.js';
 import { apiRouter } from './routes/api.js';
 
@@ -29,6 +30,7 @@ if (!APP_PASSWORD_HASH || !SESSION_SECRET) {
 const cookieMaxAgeMs = Number(COOKIE_DAYS) * 86_400_000;
 const store = new Store(path.join(__dirname, 'data'));
 const sender = createSender({ sendOne });
+const healthStore = createHealthStore();
 
 const app = express();
 app.disable('x-powered-by');
@@ -76,7 +78,7 @@ app.use(express.static(path.join(__dirname, 'dist')));
 
 // Routes
 app.use(pagesRouter());
-app.use('/api', requireAuth, csrf, apiRouter({ store, sender }));
+app.use('/api', requireAuth, csrf, apiRouter({ store, sender, healthStore }));
 
 app.get('*', requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
