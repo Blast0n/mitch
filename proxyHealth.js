@@ -1,4 +1,5 @@
 import pLimit from 'p-limit';
+import { SocksClient } from 'socks';
 
 const AUTH_FAIL_MARKERS = [
   'authentication failed',
@@ -26,9 +27,26 @@ export function classify(err) {
   return 'unknown';
 }
 
+export const defaultSocksTransport = {
+  async connect({ proxy, destination }) {
+    const socksOpts = {
+      proxy: {
+        host: proxy.host,
+        port: proxy.port,
+        type: 5,
+        ...(proxy.username ? { userId: proxy.username } : {}),
+        ...(proxy.password ? { password: proxy.password } : {})
+      },
+      destination: { host: destination.host, port: destination.port },
+      command: 'connect'
+    };
+    const { socket } = await SocksClient.createConnection(socksOpts);
+    return socket;
+  }
+};
+
 export async function checkOne(proxy, opts = {}) {
-  const transport = opts.transport;
-  if (!transport) throw new Error('checkOne: opts.transport is required');
+  const transport = opts.transport ?? defaultSocksTransport;
   const timeoutMs = opts.timeoutMs ?? 5000;
   const destination = opts.destination ?? { host: 'irc-ws.chat.twitch.tv', port: 443 };
   const start = Date.now();
