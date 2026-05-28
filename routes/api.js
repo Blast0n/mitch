@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { validateAccounts, validateProxies, validateSettings } from '../store.js';
 import { sendOne } from '../twitch.js';
 import { assignProxy } from '../sender.js';
+import { checkOne as defaultCheckOne } from '../proxyHealth.js';
+import { keyOf } from '../healthStore.js';
 
-export function apiRouter({ store, sender, sendOne: sendOneImpl }) {
+export function apiRouter({ store, sender, sendOne: sendOneImpl, healthStore, checkOne: checkOneImpl }) {
   const r = Router();
   const sendOneFn = sendOneImpl ?? sendOne;
 
@@ -19,6 +21,54 @@ export function apiRouter({ store, sender, sendOne: sendOneImpl }) {
   crud('accounts', validateAccounts);
   crud('proxies', validateProxies);
   crud('settings', validateSettings);
+
+  const checkOneFn = checkOneImpl ?? defaultCheckOne;
+  let checkInFlight = false;
+
+  r.post('/proxies/check', async (req, res) => {
+    if (!healthStore) return res.status(500).json({ error: 'no_health_store' });
+    if (checkInFlight) return res.status(409).json({ error: 'check_running' });
+    // Acquire lock synchronously before any await to prevent race conditions
+    checkInFlight = true;
+    try {
+      const proxies = await store.read('proxies');
+      const body = req.body || {};
+      let indices;
+      if (body.indices === undefined) {
+        indices = proxies.map((_, i) => i);
+      } else {
+        if (!Array.isArray(body.indices)) return res.status(400).json({ error: 'invalid_indices' });
+        const valid = body.indices.every(i =>
+          Number.isInteger(i) && i >= 0 && i < proxies.length
+        );
+        if (!valid) return res.status(400).json({ error: 'invalid_indices' });
+        indices = body.indices;
+      }
+
+      const results = await Promise.all(indices.map(async (i) => {
+        const proxy = proxies[i];
+        const r = await checkOneFn(proxy);
+        const key = keyOf(proxy);
+        const entry = {
+          ok: r.ok,
+          latencyMs: r.latencyMs,
+          checkedAt: Date.now(),
+          ...(r.error ? { error: r.error } : {}),
+          ...(r.details ? { details: r.details } : {})
+        };
+        healthStore.set(key, entry);
+        return { index: i, key, ...entry };
+      }));
+      res.json({ results });
+    } finally {
+      checkInFlight = false;
+    }
+  });
+
+  r.get('/proxies/health', (_req, res) => {
+    if (!healthStore) return res.status(500).json({ error: 'no_health_store' });
+    res.json({ entries: healthStore.getAll() });
+  });
 
   r.post('/quick-send', async (req, res) => {
     if (sender.isRunning()) return res.status(409).json({ error: 'bulk_running' });

@@ -5,7 +5,7 @@ export const ERROR_LABELS: Record<string, string> = {
   twitch_unreachable: 'Twitch недоступен',
   chat_blocked: 'Аккаунт заблокирован в чате',
   join_failed: 'Не удалось войти в канал',
-  timeout: 'Превышено время ожидания (15 сек)',
+  timeout: 'Превышено время ожидания',
   unknown: 'Неизвестная ошибка',
   bulk_running: 'Идёт bulk-send, подожди завершения',
   unknown_account: 'Аккаунт не найден',

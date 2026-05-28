@@ -7,7 +7,8 @@ import { QuickSend } from '@/components/QuickSend';
 import { JobStats } from '@/components/JobStats';
 import { EventLog, type LogEntry } from '@/components/EventLog';
 import { ProgressTable, type ProgressRow } from '@/components/ProgressTable';
-import { api, type Account, type Proxy, type Settings, type JobEvent } from '@/lib/api';
+import { api, type Account, type Proxy, type Settings, type JobEvent, type ProxyHealthResponse } from '@/lib/api';
+import { keyOf } from '@/lib/proxyKey';
 import { errLabel, STAGE_LABELS } from '@/lib/error-labels';
 import { useSSE } from '@/hooks/useSSE';
 
@@ -119,6 +120,15 @@ export default function MainPage() {
 
   const etaSec = settings?.spreadSeconds || null;
 
+  async function confirmDeadProxies(): Promise<boolean> {
+    if (proxies.length === 0) return true;
+    const health = await api.get<ProxyHealthResponse>('/api/proxies/health');
+    const byKey = Object.fromEntries((health?.entries ?? []).map(e => [e.key, e]));
+    const dead = proxies.filter(p => byKey[keyOf(p)]?.ok === false).length;
+    if (dead === 0) return true;
+    return window.confirm(`${dead} прокси помечены как мёртвые — аккаунты на них могут упасть. Продолжить?`);
+  }
+
   async function startJob(endpoint: string) {
     setJobId(null);
     processedRef.current = 0;
@@ -160,7 +170,14 @@ export default function MainPage() {
         </CardContent>
       </Card>
       <div className="flex gap-2">
-        <Button onClick={() => startJob('/api/send')} disabled={isRunning}>Send</Button>
+        <Button
+          onClick={async () => {
+            if (await confirmDeadProxies()) startJob('/api/send');
+          }}
+          disabled={isRunning}
+        >
+          Send
+        </Button>
         {doneSummary && doneSummary.failed > 0 && (
           <Button variant="secondary" onClick={() => startJob('/api/send/retry-failed')} disabled={isRunning}>Retry failed</Button>
         )}

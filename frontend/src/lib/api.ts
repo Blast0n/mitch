@@ -31,6 +31,20 @@ export type JobEvent =
 
 export type QuickSendResponse = SendResult & { proxy: string };
 
+export type ProxyHealthEntry = {
+  key: string;
+  ok: boolean;
+  latencyMs: number;
+  checkedAt: number;
+  error?: string;
+  details?: string;
+};
+
+export type ProxyHealthResponse = { entries: ProxyHealthEntry[] };
+
+export type ProxyCheckResult = ProxyHealthEntry & { index: number };
+export type ProxyCheckResponse = { results: ProxyCheckResult[] };
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T | null> {
   const res = await fetch(path, {
     method,
