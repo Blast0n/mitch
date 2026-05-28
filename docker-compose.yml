@@ -6,9 +6,8 @@ services:
     image: twitch-sender:latest
     container_name: twitch-sender
     restart: unless-stopped
-    env_file:
-      - path: .env
-        format: raw
+    # .env читается dotenv-ом внутри Node из /app/.env (через bind-mount репозитория).
+    # env_file из compose НЕ используем — он интерполирует $ в bcrypt-хеше.
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
