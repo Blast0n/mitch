@@ -6,7 +6,9 @@ services:
     image: twitch-sender:latest
     container_name: twitch-sender
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - path: .env
+        format: raw
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
