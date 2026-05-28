@@ -74,14 +74,20 @@ app.get('/logout', (req, res) => {
   res.redirect('/login');
 });
 
-// Static
+// Public pages (GET /login)
+app.use(pagesRouter());
+
+// Everything below requires a valid session cookie
+app.use(requireAuth);
+
+// Static SPA assets
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// Routes
-app.use(pagesRouter());
-app.use('/api', requireAuth, csrf, apiRouter({ store, sender, healthStore }));
+// API
+app.use('/api', csrf, apiRouter({ store, sender, healthStore }));
 
-app.get('*', requireAuth, (req, res) => {
+// SPA fallback
+app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
