@@ -103,3 +103,21 @@ test('createSender: forwards stage events from sendOne', async () => {
   assert.deepEqual(stageEvents[0], { type: 'stage', login, stage: 'connecting' });
   assert.deepEqual(stageEvents[1], { type: 'stage', login, stage: 'sent' });
 });
+
+import { shuffle } from '../sender.js';
+
+test('shuffle: deterministic with injected rng', () => {
+  // Fisher–Yates with rng()=0 always: [0,1,2] -> [1,2,0]
+  assert.deepEqual(shuffle([0, 1, 2], () => 0), [1, 2, 0]);
+});
+
+test('shuffle: result is a permutation of the input', () => {
+  const out = shuffle([0, 1, 2, 3, 4], () => 0.5);
+  assert.deepEqual([...out].sort((a, b) => a - b), [0, 1, 2, 3, 4]);
+});
+
+test('shuffle: does not mutate input', () => {
+  const input = [0, 1, 2];
+  shuffle(input, () => 0);
+  assert.deepEqual(input, [0, 1, 2]);
+});

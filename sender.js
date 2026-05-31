@@ -7,6 +7,15 @@ export function assignProxy(index, proxies, accountsPerProxy) {
   return proxies[group % proxies.length];
 }
 
+export function shuffle(arr, rng = Math.random) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 export function createSender({ sendOne }) {
   let currentJob = null;
   const listenersByJob = new Map();
