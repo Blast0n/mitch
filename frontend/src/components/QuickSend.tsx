@@ -82,7 +82,7 @@ export function QuickSend({ disabled, onLogEvent }: Props) {
           <Button type="submit" disabled={disabled || busy} size="icon"><Send className="h-4 w-4" /></Button>
         </form>
         <div className={`mt-2 text-sm min-h-[1.25rem] ${status.ok === true ? 'text-emerald-500' : status.ok === false ? 'text-destructive' : 'text-muted-foreground'}`}>
-          {disabled ? 'Жди завершения bulk-send' : status.text}
+          {status.text}
         </div>
       </CardContent>
     </Card>

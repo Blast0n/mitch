@@ -20,7 +20,7 @@ function nowStamp() {
 
 type RowMap = Record<string, ProgressRow>;
 
-function deriveRows(events: JobEvent[], allLogins: string[]): { rows: ProgressRow[]; counts: { pending: number; sending: number; ok: number; failed: number }; doneSummary?: { total: number; ok: number; failed: number } } {
+function deriveRows(events: JobEvent[], allLogins: string[]): { rows: ProgressRow[]; counts: { pending: number; sending: number; ok: number; failed: number; stopped: number }; doneSummary?: { total: number; ok: number; failed: number } } {
   const map: RowMap = {};
   for (const l of allLogins) {
     map[l] = { login: l, status: 'pending', proxy: '—', durationMs: null, error: '' };
@@ -36,18 +36,20 @@ function deriveRows(events: JobEvent[], allLogins: string[]): { rows: ProgressRo
     } else if (e.type === 'progress') {
       const r = map[e.login] || (map[e.login] = { login: e.login, status: 'pending', proxy: '—', durationMs: null, error: '' });
       r.proxy = e.proxy;
-      r.durationMs = e.result.durationMs;
-      if (e.result.ok) { r.status = 'ok'; r.kind = 'ok'; r.error = ''; }
+      r.durationMs = e.result.durationMs ?? null;
+      if (e.result.stopped) { r.status = 'остановлен'; r.kind = 'stopped'; r.error = ''; }
+      else if (e.result.ok) { r.status = 'ok'; r.kind = 'ok'; r.error = ''; }
       else { r.status = 'failed'; r.kind = 'err'; r.error = errLabel(e.result.error); }
     } else if (e.type === 'done') {
       doneSummary = e.summary;
     }
   }
   const rows = Object.values(map);
-  const counts = { pending: 0, sending: 0, ok: 0, failed: 0 };
+  const counts = { pending: 0, sending: 0, ok: 0, failed: 0, stopped: 0 };
   for (const r of rows) {
     if (r.kind === 'ok') counts.ok++;
     else if (r.kind === 'err') counts.failed++;
+    else if (r.kind === 'stopped') counts.stopped++;
     else if (r.kind === 'in-progress') counts.sending++;
     else counts.pending++;
   }
@@ -107,12 +109,14 @@ export default function MainPage() {
       } else if (ev.type === 'progress') {
         dispatchLog({
           type: 'add',
-          entry: ev.result.ok
-            ? { login: ev.login, text: `успех (${ev.result.durationMs}ms)`, kind: 'ok' }
-            : { login: ev.login, text: 'ошибка: ' + errLabel(ev.result.error), kind: 'err' }
+          entry: ev.result.stopped
+            ? { login: ev.login, text: 'остановлен' }
+            : ev.result.ok
+              ? { login: ev.login, text: `успех (${ev.result.durationMs}ms)`, kind: 'ok' }
+              : { login: ev.login, text: 'ошибка: ' + errLabel(ev.result.error), kind: 'err' }
         });
       } else if (ev.type === 'done') {
-        dispatchLog({ type: 'add', entry: { text: `завершено: ${ev.summary.ok}/${ev.summary.total} успешно, ${ev.summary.failed} с ошибкой`, kind: ev.summary.failed === 0 ? 'ok' : 'err' } });
+        dispatchLog({ type: 'add', entry: { text: `завершено: ${ev.summary.ok}/${ev.summary.total} успешно, ${ev.summary.failed} с ошибкой, ${ev.summary.stopped} остановлено`, kind: ev.summary.failed === 0 ? 'ok' : 'err' } });
       }
       processedRef.current++;
     }
@@ -151,10 +155,20 @@ export default function MainPage() {
     }
   }
 
+  async function stopJob() {
+    const res = await api.request<import('@/lib/api').StopResponse>('POST', '/api/send/stop');
+    if (res.ok) {
+      dispatchLog({ type: 'add', entry: { text: 'остановлено вручную' } });
+    } else if (!res.ok && res.err.status !== 409) {
+      toast.error(errLabel(res.err.error) || `HTTP ${res.err.status}`);
+    }
+    // 409 not_running: job already finished — ignore silently
+  }
+
   return (
     <div className="container mx-auto py-6 space-y-4">
       <QuickSend
-        disabled={isRunning}
+        disabled={false}
         onLogEvent={(e) => dispatchLog({ type: 'add', entry: e })}
       />
       <Card>
@@ -178,12 +192,15 @@ export default function MainPage() {
         >
           Send
         </Button>
+        {isRunning && (
+          <Button variant="destructive" onClick={stopJob}>Stop</Button>
+        )}
         {doneSummary && doneSummary.failed > 0 && (
           <Button variant="secondary" onClick={() => startJob('/api/send/retry-failed')} disabled={isRunning}>Retry failed</Button>
         )}
       </div>
       {(isRunning || doneSummary || events.length > 0) && (
-        <JobStats elapsedSec={elapsed} etaSec={etaSec} pending={counts.pending} sending={counts.sending} ok={counts.ok} failed={counts.failed} />
+        <JobStats elapsedSec={elapsed} etaSec={etaSec} pending={counts.pending} sending={counts.sending} ok={counts.ok} failed={counts.failed} stopped={counts.stopped} />
       )}
       <EventLog entries={log} />
       <ProgressTable rows={rows} />

@@ -10,7 +10,9 @@ export const ERROR_LABELS: Record<string, string> = {
   bulk_running: 'Идёт bulk-send, подожди завершения',
   unknown_account: 'Аккаунт не найден',
   empty_message: 'Введи сообщение',
-  no_channel: 'В Settings не задан канал'
+  no_channel: 'В Settings не задан канал',
+  stopped: 'Остановлен',
+  not_running: 'Рассылка не идёт'
 };
 
 export const STAGE_LABELS: Record<string, string> = {

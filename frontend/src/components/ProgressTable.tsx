@@ -7,7 +7,7 @@ export type ProgressRow = {
   proxy: string;
   durationMs: number | null;
   error: string;
-  kind?: 'ok' | 'err' | 'in-progress';
+  kind?: 'ok' | 'err' | 'in-progress' | 'stopped';
 };
 
 type Props = { rows: ProgressRow[] };
@@ -16,6 +16,7 @@ function statusBadge(r: ProgressRow) {
   if (r.kind === 'ok') return <Badge className="bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/15">{r.status}</Badge>;
   if (r.kind === 'err') return <Badge variant="destructive">{r.status}</Badge>;
   if (r.kind === 'in-progress') return <Badge variant="secondary">{r.status}</Badge>;
+  if (r.kind === 'stopped') return <Badge variant="outline" className="text-muted-foreground">{r.status}</Badge>;
   return <Badge variant="outline">{r.status}</Badge>;
 }
 
