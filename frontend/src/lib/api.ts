@@ -19,6 +19,7 @@ export type SendResult = {
   ok: boolean;
   error?: string;
   durationMs: number;
+  stopped?: boolean;
 };
 
 export type Stage = 'connecting' | 'auth' | 'join' | 'sent' | 'waiting';
@@ -27,9 +28,10 @@ export type JobEvent =
   | { type: 'sending'; login: string; proxy: string }
   | { type: 'stage'; login: string; stage: Stage }
   | { type: 'progress'; login: string; proxy: string; result: SendResult }
-  | { type: 'done'; jobId: string; summary: { total: number; ok: number; failed: number } };
+  | { type: 'done'; jobId: string; summary: { total: number; ok: number; failed: number; stopped: number } };
 
 export type QuickSendResponse = SendResult & { proxy: string };
+export type StopResponse = { stopped: true; jobId: string };
 
 export type ProxyHealthEntry = {
   key: string;
