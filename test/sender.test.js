@@ -121,3 +121,64 @@ test('shuffle: does not mutate input', () => {
   shuffle(input, () => 0);
   assert.deepEqual(input, [0, 1, 2]);
 });
+
+test('start: randomizes send order but keeps proxy bound to original index', async () => {
+  const calls = []; // { login, proxyHost }
+  const sendOne = async (account, proxy) => {
+    calls.push({ login: account.login, proxyHost: proxy ? proxy.host : null });
+    return { ok: true, durationMs: 1 };
+  };
+  // rng()=0 -> shuffle([0,1,2]) = [1,2,0]
+  const sender = createSender({ sendOne, rng: () => 0 });
+  const accounts = [
+    { login: 'a0', oauthToken: 'oauth:0' },
+    { login: 'a1', oauthToken: 'oauth:1' },
+    { login: 'a2', oauthToken: 'oauth:2' }
+  ];
+  const proxies = [{ host: 'p0' }, { host: 'p1' }, { host: 'p2' }];
+  sender.start({ accounts, proxies, settings: { ...settings, accountsPerProxy: 1, concurrency: 1, spreadSeconds: 0 } });
+  await new Promise(r => setTimeout(r, 50));
+  // order of logins follows the shuffled index order [1,2,0]
+  assert.deepEqual(calls.map(c => c.login), ['a1', 'a2', 'a0']);
+  // each account still uses the proxy at its ORIGINAL index
+  const byLogin = Object.fromEntries(calls.map(c => [c.login, c.proxyHost]));
+  assert.equal(byLogin.a0, 'p0');
+  assert.equal(byLogin.a1, 'p1');
+  assert.equal(byLogin.a2, 'p2');
+});
+
+test('stop: cancels not-yet-started tasks, in-flight finishes, done reports stopped', async () => {
+  let started = 0;
+  const gate = deferred(); // first sendOne hangs until released
+  const sendOne = async () => { started++; await gate.p; return { ok: true, durationMs: 1 }; };
+  const sender = createSender({ sendOne });
+  const accounts = Array.from({ length: 4 }, (_, i) => ({ login: 'a' + i, oauthToken: 'oauth:' + i }));
+  const events = [];
+  // big spread so only pos 0 fires immediately; pos 1..3 stay pending
+  const { jobId } = sender.start({ accounts, proxies: [], settings: { ...settings, concurrency: 1, spreadSeconds: 40 } });
+  sender.subscribe(jobId, (e) => events.push(e));
+  await new Promise(r => setTimeout(r, 20)); // let pos 0 enter sendOne
+  assert.equal(started, 1, 'exactly one send in flight');
+  assert.equal(sender.stop(jobId), true);
+  assert.equal(sender.isRunning(), false, 'no longer running after stop');
+  gate.resolve(); // let the in-flight send finish
+  await new Promise(r => setTimeout(r, 20));
+  assert.equal(started, 1, 'cancelled tasks never called sendOne');
+  const done = events.find(e => e.type === 'done');
+  assert.ok(done, 'done emitted after stop');
+  assert.equal(done.summary.total, 4);
+  assert.equal(done.summary.ok, 1);
+  assert.equal(done.summary.stopped, 3);
+  assert.equal(done.summary.failed, 0);
+  // cancelled accounts emit progress with stopped:true
+  const stoppedEvents = events.filter(e => e.type === 'progress' && e.result.stopped === true);
+  assert.equal(stoppedEvents.length, 3);
+});
+
+test('stop: returns false for wrong or finished jobId', async () => {
+  const sender = createSender({ sendOne: async () => ({ ok: true, durationMs: 1 }) });
+  assert.equal(sender.stop('no-such-job'), false);
+  const { jobId } = sender.start({ accounts: [{ login: 'a', oauthToken: 'oauth:1' }], proxies: [], settings });
+  await new Promise(r => setTimeout(r, 50)); // job completes (spreadSeconds 0)
+  assert.equal(sender.stop(jobId), false, 'finished job cannot be stopped');
+});

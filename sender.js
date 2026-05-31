@@ -16,7 +16,7 @@ export function shuffle(arr, rng = Math.random) {
   return a;
 }
 
-export function createSender({ sendOne }) {
+export function createSender({ sendOne, rng = Math.random }) {
   let currentJob = null;
   const listenersByJob = new Map();
 
@@ -38,7 +38,9 @@ export function createSender({ sendOne }) {
       status: 'running',
       results: [],
       settings,
-      startedAt: Date.now()
+      startedAt: Date.now(),
+      cancelled: false,
+      pendingTasks: new Set()
     };
     currentJob = job;
     listenersByJob.set(jobId, new Set());
@@ -46,12 +48,26 @@ export function createSender({ sendOne }) {
     const limit = pLimit(Math.max(1, settings.concurrency || 1));
     const interval = (settings.spreadSeconds * 1000) / Math.max(1, accounts.length);
 
-    const tasks = accounts.map((account, i) => {
-      const proxy = assignProxy(i, proxies, settings.accountsPerProxy);
+    function markStopped(task) {
+      if (task.done) return;
+      task.done = true;
+      job.results.push({ login: task.account.login, proxy: task.proxyLabel, ok: false, stopped: true });
+      emit(jobId, { type: 'progress', login: task.account.login, proxy: task.proxyLabel, result: { ok: false, stopped: true } });
+      task.resolve();
+    }
+    job.markStopped = markStopped;
+
+    const order = shuffle(accounts.map((_, i) => i), rng);
+    const tasks = order.map((accIdx, pos) => {
+      const account = accounts[accIdx];
+      const proxy = assignProxy(accIdx, proxies, settings.accountsPerProxy);
       const proxyLabel = proxy ? `${proxy.host}:${proxy.port}` : 'direct';
-      const delay = i * interval;
+      const delay = pos * interval;
       return new Promise((resolve) => {
-        setTimeout(() => {
+        const task = { timer: null, resolve, account, proxyLabel, done: false };
+        task.timer = setTimeout(() => {
+          job.pendingTasks.delete(task);
+          if (job.cancelled) return markStopped(task);
           limit(async () => {
             emit(jobId, { type: 'sending', login: account.login, proxy: proxyLabel });
             const result = await sendOne(account, proxy, settings.channel, settings.word, {
@@ -62,13 +78,16 @@ export function createSender({ sendOne }) {
             emit(jobId, { type: 'progress', login: account.login, proxy: proxyLabel, result });
           }).then(resolve, resolve);
         }, delay);
+        job.pendingTasks.add(task);
       });
     });
 
     Promise.all(tasks).then(() => {
-      job.status = 'done';
+      if (job.status === 'running') job.status = 'done';
       const ok = job.results.filter(r => r.ok).length;
-      const summary = { total: accounts.length, ok, failed: accounts.length - ok };
+      const stopped = job.results.filter(r => r.stopped).length;
+      const failed = job.results.length - ok - stopped;
+      const summary = { total: accounts.length, ok, failed, stopped };
       emit(jobId, { type: 'done', jobId, summary });
       setTimeout(() => {
         listenersByJob.delete(jobId);
@@ -77,6 +96,19 @@ export function createSender({ sendOne }) {
     });
 
     return { jobId };
+  }
+
+  function stop(jobId) {
+    if (!currentJob || currentJob.jobId !== jobId || currentJob.status !== 'running') return false;
+    const job = currentJob;
+    job.cancelled = true;
+    job.status = 'stopped';
+    for (const task of job.pendingTasks) {
+      clearTimeout(task.timer);
+      job.markStopped(task);
+    }
+    job.pendingTasks.clear();
+    return true;
   }
 
   function subscribe(jobId, listener) {
@@ -97,7 +129,7 @@ export function createSender({ sendOne }) {
 
   function getFailedLogins(jobId) {
     if (!currentJob || currentJob.jobId !== jobId) return [];
-    return currentJob.results.filter(r => !r.ok).map(r => r.login);
+    return currentJob.results.filter(r => !r.ok && !r.stopped).map(r => r.login);
   }
 
   function isRunning() {
@@ -108,5 +140,5 @@ export function createSender({ sendOne }) {
     return currentJob?.jobId ?? null;
   }
 
-  return { start, subscribe, getSnapshot, getFailedLogins, isRunning, lastJobId };
+  return { start, stop, subscribe, getSnapshot, getFailedLogins, isRunning, lastJobId };
 }
