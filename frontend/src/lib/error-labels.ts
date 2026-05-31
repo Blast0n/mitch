@@ -7,7 +7,6 @@ export const ERROR_LABELS: Record<string, string> = {
   join_failed: 'Не удалось войти в канал',
   timeout: 'Превышено время ожидания',
   unknown: 'Неизвестная ошибка',
-  bulk_running: 'Идёт bulk-send, подожди завершения',
   unknown_account: 'Аккаунт не найден',
   empty_message: 'Введи сообщение',
   no_channel: 'В Settings не задан канал',
