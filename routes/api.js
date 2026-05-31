@@ -71,7 +71,7 @@ export function apiRouter({ store, sender, sendOne: sendOneImpl, healthStore, ch
   });
 
   r.post('/quick-send', async (req, res) => {
-    if (sender.isRunning()) return res.status(409).json({ error: 'bulk_running' });
+    if (sender.isRunning()) sender.stop(sender.lastJobId());
     const { login, message } = req.body || {};
     if (typeof message !== 'string' || message.trim() === '') {
       return res.status(400).json({ error: 'empty_message' });
@@ -84,7 +84,6 @@ export function apiRouter({ store, sender, sendOne: sendOneImpl, healthStore, ch
     if (idx < 0) return res.status(404).json({ error: 'unknown_account' });
     const proxy = assignProxy(idx, proxies, settings.accountsPerProxy);
     const proxyLabel = proxy ? `${proxy.host}:${proxy.port}` : 'direct';
-    if (sender.isRunning()) return res.status(409).json({ error: 'bulk_running' });
     const result = await sendOneFn(accounts[idx], proxy, settings.channel, message);
     res.json({ ...result, proxy: proxyLabel });
   });
@@ -124,6 +123,13 @@ export function apiRouter({ store, sender, sendOne: sendOneImpl, healthStore, ch
     }
   });
 
+  r.post('/send/stop', (req, res) => {
+    const id = sender.lastJobId();
+    const ok = id ? sender.stop(id) : false;
+    if (ok) return res.json({ stopped: true, jobId: id });
+    return res.status(409).json({ error: 'not_running' });
+  });
+
   r.get('/progress', (req, res) => {
     const jobId = req.query.jobId;
     if (!jobId) return res.status(400).json({ error: 'jobId required' });
@@ -144,12 +150,13 @@ export function apiRouter({ store, sender, sendOne: sendOneImpl, healthStore, ch
     const snapshot = sender.getSnapshot(jobId);
     if (snapshot) {
       for (const r of snapshot.results) {
-        res.write(`event: progress\ndata: ${JSON.stringify({ login: r.login, proxy: r.proxy, result: { ok: r.ok, error: r.error, durationMs: r.durationMs } })}\n\n`);
+        res.write(`event: progress\ndata: ${JSON.stringify({ login: r.login, proxy: r.proxy, result: { ok: r.ok, error: r.error, durationMs: r.durationMs, stopped: r.stopped } })}\n\n`);
       }
-      if (snapshot.status === 'done') {
+      if (snapshot.status !== 'running') {
         const ok = snapshot.results.filter(r => r.ok).length;
+        const stopped = snapshot.results.filter(r => r.stopped).length;
         const total = snapshot.results.length;
-        res.write(`event: done\ndata: ${JSON.stringify({ jobId, summary: { total, ok, failed: total - ok } })}\n\n`);
+        res.write(`event: done\ndata: ${JSON.stringify({ jobId, summary: { total, ok, failed: total - ok - stopped, stopped } })}\n\n`);
         return res.end();
       }
     }

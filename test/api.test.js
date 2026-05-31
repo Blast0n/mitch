@@ -164,19 +164,57 @@ test('POST /api/quick-send returns ok:false from sendOne result', async () => {
   assert.equal(r.body.error, 'token_invalid');
 });
 
-test('POST /api/quick-send 409 when bulk job running', async () => {
-  let release;
-  const blocker = new Promise(r => { release = r; });
-  const { app: a, store: s, sender } = buildAppWith(async () => { await blocker; return { ok: true, durationMs: 1 }; });
-  await s.write('accounts', [{ login: 'alice', oauthToken: 'oauth:' + 'a'.repeat(30) }]);
-  await s.write('settings', { channel: 'c', word: 'w', accountsPerProxy: 5, spreadSeconds: 0, concurrency: 1 });
-  // start bulk
+test('POST /api/quick-send stops a running bulk job, then sends', async () => {
+  const { app: a, store: s, sender } = buildAppWith(async () => ({ ok: true, durationMs: 1 }));
+  await s.write('accounts', [
+    { login: 'alice', oauthToken: 'oauth:' + 'a'.repeat(30) },
+    { login: 'bob', oauthToken: 'oauth:' + 'b'.repeat(30) },
+    { login: 'carol', oauthToken: 'oauth:' + 'c'.repeat(30) }
+  ]);
+  // large spread => bulk stays running (pending timers) right after start
+  await s.write('settings', { channel: 'c', word: 'w', accountsPerProxy: 5, spreadSeconds: 60, concurrency: 1 });
   await request(a).post('/api/send').send({}).expect(202);
-  // quick-send while bulk running
+  assert.equal(sender.isRunning(), true, 'bulk running before quick-send');
   const r = await request(a).post('/api/quick-send').send({ login: 'alice', message: 'hi' });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.ok, true);
+  assert.equal(sender.isRunning(), false, 'bulk stopped by quick-send');
+});
+
+test('POST /api/send/stop stops a running job', async () => {
+  const { app: a, store: s, sender } = buildAppWith(async () => ({ ok: true, durationMs: 1 }));
+  await s.write('accounts', [
+    { login: 'u1', oauthToken: 'oauth:' + 'x'.repeat(30) },
+    { login: 'u2', oauthToken: 'oauth:' + 'y'.repeat(30) }
+  ]);
+  await s.write('settings', { channel: 'c', word: 'w', accountsPerProxy: 5, spreadSeconds: 60, concurrency: 1 });
+  const start = await request(a).post('/api/send').send({}).expect(202);
+  const r = await request(a).post('/api/send/stop').send({});
+  assert.equal(r.status, 200);
+  assert.equal(r.body.stopped, true);
+  assert.equal(r.body.jobId, start.body.jobId);
+  assert.equal(sender.isRunning(), false);
+});
+
+test('POST /api/send/stop 409 when nothing is running', async () => {
+  const { app: a } = buildAppWith(async () => ({ ok: true, durationMs: 1 }));
+  const r = await request(a).post('/api/send/stop').send({});
   assert.equal(r.status, 409);
-  assert.equal(r.body.error, 'bulk_running');
-  release();
+  assert.equal(r.body.error, 'not_running');
+});
+
+test('POST /api/send/stop 409 on second stop (already stopped)', async () => {
+  const { app: a, store: s } = buildAppWith(async () => ({ ok: true, durationMs: 1 }));
+  await s.write('accounts', [
+    { login: 'u1', oauthToken: 'oauth:' + 'x'.repeat(30) },
+    { login: 'u2', oauthToken: 'oauth:' + 'y'.repeat(30) }
+  ]);
+  await s.write('settings', { channel: 'c', word: 'w', accountsPerProxy: 5, spreadSeconds: 60, concurrency: 1 });
+  await request(a).post('/api/send').send({}).expect(202);
+  await request(a).post('/api/send/stop').send({}).expect(200);
+  const r = await request(a).post('/api/send/stop').send({});
+  assert.equal(r.status, 409);
+  assert.equal(r.body.error, 'not_running');
 });
 
 test('POST /api/quick-send 404 unknown login', async () => {
